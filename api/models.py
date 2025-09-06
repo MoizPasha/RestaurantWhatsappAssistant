@@ -145,6 +145,11 @@ class Bill(models.Model):
 
     def calculate_subtotal(self) -> Decimal:
         """Sum all related BillItems."""
+        # If the bill isn't saved yet it has no PK and reverse relations
+        # cannot be used. In that case treat subtotal as zero; the caller
+        # (save/create flow) will recalculate after related items exist.
+        if not self.pk:
+            return Decimal("0.00")
         return self._quantize(sum((item.get_total_price() for item in self.items.all()), Decimal("0.00")))
 
     def calculate_tax(self) -> Decimal:
@@ -195,9 +200,24 @@ class Bill(models.Model):
             ])
 
     def save(self, *args, **kwargs):
-        """Ensure totals are always correct."""
-        self.update_totals(save=False)
-        super().save(*args, **kwargs)
+        """Ensure totals are always correct.
+
+        Important: when creating a new Bill the related reverse relation
+        `self.items` is not available until the Bill has a primary key.
+        Accessing `self.items.all()` before the Bill is saved raises
+        ValueError. To avoid that, when the instance has no pk yet we
+        perform an initial save to obtain the pk, then update totals and
+        save again.
+        """
+        if self.pk is None:
+            # First save to obtain a primary key so reverse relations work.
+            super().save(*args, **kwargs)
+            # Recalculate totals now that self.items can be queried.
+            self.update_totals(save=True)
+        else:
+            # Existing instance: recalc totals without saving inside update
+            self.update_totals(save=False)
+            super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Bill #{self.pk} for {self.customer} - {self.total_amount}"

@@ -47,8 +47,8 @@ class MenuItemSizeSerializer(serializers.ModelSerializer):
 class CustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'phone', 'email', 'address']  
-        # you can adjust fields based on your model
+        fields = ['id', 'first_name', 'last_name', 'phone', 'address', 'created_at']
+    # you can adjust fields based on your model
 
 
 class BillItemSerializer(serializers.ModelSerializer):
@@ -61,7 +61,12 @@ class BillItemSerializer(serializers.ModelSerializer):
 
 
 class BillSerializer(serializers.ModelSerializer):
-    customer = CustomerSerializer(read_only=True)       # nested serializer
+    # nested read-only customer for responses
+    customer = CustomerSerializer(read_only=True)
+    # writable customer id for create/update payloads (maps to `customer`)
+    customer_id = serializers.PrimaryKeyRelatedField(
+        source='customer', queryset=Customer.objects.all(), write_only=True, required=True
+    )
     items = BillItemSerializer(many=True, read_only=True)  # uses related_name from BillItem
 
     class Meta:
@@ -69,6 +74,7 @@ class BillSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'customer',
+            'customer_id',
             'status',
             'order_type',
             'payment_method',
@@ -85,3 +91,17 @@ class BillSerializer(serializers.ModelSerializer):
             'items',
             'created_at'
         ]
+
+    def create(self, validated_data):
+        # Support clients that send `customer` as an integer id instead of
+        # `customer_id`. Ensure validated_data contains a Customer instance
+        # before creating the Bill to avoid DB NOT NULL errors.
+        if 'customer' not in validated_data:
+            raw = self.initial_data.get('customer') or self.initial_data.get('customer_id')
+            if raw is not None:
+                try:
+                    validated_data['customer'] = Customer.objects.get(pk=raw)
+                except Customer.DoesNotExist:
+                    raise serializers.ValidationError({'customer': 'Customer not found'})
+
+        return super().create(validated_data)

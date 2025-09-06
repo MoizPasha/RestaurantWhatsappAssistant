@@ -50,32 +50,45 @@ async def get_categories():
         return resp.json()
 
 @mcp.tool
-async def get_menu_items(category_id: int = -1, subcategory_id: int = -1):
+async def get_menu_items(category_id: int = 0 , subcategory_id: int = 0):
     """
-    Get all menu items, optionally filter by type or group.
-    Shows name, description, availability, group, and type.
+    Get all menu items, optionally filter by category id or subcategory id.
+    Shows name, description, availability
     """
     params = {}
-    if category_id != -1:
-        params['subcategory__category'] = category_id
-    if subcategory_id != -1:
-        params['subcategory'] = subcategory_id
+    # tolerate None, empty strings, and 0 from callers
+    if category_id != 0:
+        try:
+            params['subcategory__category'] = int(category_id)
+        except Exception:
+            params['subcategory__category'] = category_id
+    if subcategory_id != 0:
+        try:
+            params['subcategory'] = int(subcategory_id)
+        except Exception:
+            params['subcategory'] = subcategory_id
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{API_BASE}/items/", params=params)
         resp.raise_for_status()
         return resp.json()
 
 @mcp.tool
-async def get_sizes(category_id: int = -1, subcategory_id: int = -1):
+async def get_sizes(category_id: int = 0, subcategory_id: int = 0):
     """
-    Get all sizes, optionally filter by type or group.
+    Get all sizes, optionally filter by category id or subcategory id.
     Shows type, group, size names, and prices.
     """
     params = {}
-    if category_id != -1:
-        params['subcategory__category'] = category_id
-    if subcategory_id != -1:
-        params['subcategory'] = subcategory_id
+    if category_id != 0:
+        try:
+            params['subcategory__category'] = int(category_id)
+        except Exception:
+            params['subcategory__category'] = category_id
+    if subcategory_id != 0:
+        try:
+            params['subcategory'] = int(subcategory_id)
+        except Exception:
+            params['subcategory'] = subcategory_id
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{API_BASE}/sizes/", params=params)
         resp.raise_for_status()
@@ -88,6 +101,15 @@ async def get_customers():
     """List all customers"""
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{API_BASE}/customers/")
+        resp.raise_for_status()
+        return resp.json()
+
+
+@mcp.tool
+async def check_customer_by_phone(phone: str):
+    """Check if a customer exists by phone. Returns {'exists': bool, 'customer': {...}} when found."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(f"{API_BASE}/customers/by-phone/", params={'phone': phone})
         resp.raise_for_status()
         return resp.json()
 
